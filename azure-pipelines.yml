@@ -23,14 +23,12 @@ steps:
     provider: 'azurerm'
     command: 'validate'
     workingDirectory: '$(System.DefaultWorkingDirectory)/infra/logicapp'
-
 - task: TerraformTask@5
-  displayName: 'terraform plan'
   inputs:
     provider: 'azurerm'
-    command: 'plan'
-    workingDirectory: '$(System.DefaultWorkingDirectory)/infra/logicapp'
-    commandOptions: '-lock=false'
+    command: 'validate'
+- task: TerraformTask@5
+  inputs:
+    provider: 'azurerm'
+    command: 'apply'
     environmentServiceNameAzureRM: 'Myconnectionactive'
-    environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
-
