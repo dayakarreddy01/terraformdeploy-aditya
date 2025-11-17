@@ -18,6 +18,7 @@ stages:
         inputs:
           provider: 'azurerm'
           command: 'init'
+          WorkingDirectory: '$(System.DefaultWorkingDirectory)/Folder/terraform'
           backendAzureRmUseEntraIdForAuthentication: false
           backendServiceArm: 'Myconnectionactive'
           backendAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
@@ -35,6 +36,7 @@ stages:
         inputs:
           provider: 'azurerm'
           command: 'plan'
+          WorkingDirectory: '$(System.DefaultWorkingDirectory)/Folder/terraform'
           commandOptions: '-lock=false'
           environmentServiceNameAzureRM: 'Myconnectionactive'
           environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
