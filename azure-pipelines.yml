@@ -3,35 +3,34 @@ trigger:
 
 pool: 
  name: 'Azure Pipelines'     # ensure Linux path & toolcache
-
 steps:
-- task: TerraformInstaller@1
+- task: TerraformTask@5
+  displayName: 'terraform init'
   inputs:
-    terraformVersion: 'latest'
+    provider: 'azurerm'
+    command: 'init'
+    workingDirectory: '$(System.DefaultWorkingDirectory)/infra/logicapp'   # <-- fix path + casing
+    backendServiceArm: 'Myconnectionactive'
+    backendAzureRmResourceGroupName: 'rg-dxDevUKWest'
+    backendAzureRmStorageAccountName: 'demonewtestgroupb2e7'
+    backendAzureRmContainerName: 'demonew'
+    backendAzureRmKey: 'trf/terraform.tfstate'
+    backendAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
 
-- script: |
-    terraform -version
-    which terraform
-  displayName: 'Show Terraform version'
-
-# Azure login (Service Connection)
-- task: AzureCLI@2
-  displayName: 'Az login'
+- task: TerraformTask@5
+  displayName: 'terraform validate'
   inputs:
-    azureSubscription: 'Myconnectionactive'
-    scriptType: bash
-    scriptLocation: inlineScript
-    inlineScript: az account show
+    provider: 'azurerm'
+    command: 'validate'
+    workingDirectory: '$(System.DefaultWorkingDirectory)/infra/logicapp'
 
-# Run terraform with -chdir to your folder
-- script: |
-    TF_DIR="$(System.DefaultWorkingDirectory)/Folder/terraform"
-    terraform -chdir="$TF_DIR" init \
-      -backend-config="resource_group_name=rg-dxDevUKWest" \
-      -backend-config="storage_account_name=demonewtestgroupb2e7" \
-      -backend-config="container_name=demonew" \
-      -backend-config="key=trf/terraform.tfstate" \
-      -backend-config="subscription_id=12486a52-70e3-4ae6-9f94-e6bacd147419"
-    terraform -chdir="$TF_DIR" validate
-    terraform -chdir="$TF_DIR" plan -lock=false
-    terraform -chdir="$TF_DIR" apply -auto-approve -lock=false
+- task: TerraformTask@5
+  displayName: 'terraform plan'
+  inputs:
+    provider: 'azurerm'
+    command: 'plan'
+    workingDirectory: '$(System.DefaultWorkingDirectory)/infra/logicapp'
+    commandOptions: '-lock=false'
+    environmentServiceNameAzureRM: 'Myconnectionactive'
+    environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
+
