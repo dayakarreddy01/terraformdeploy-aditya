@@ -9,7 +9,6 @@ steps:
   inputs:
     provider: 'azurerm'
     command: 'init'
-    workingDirectory: '$(System.DefaultWorkingDirectory)/infra/logicapp'   # <-- fix path + casing
     backendServiceArm: 'Myconnectionactive'
     backendAzureRmResourceGroupName: 'rg-dxDevUKWest'
     backendAzureRmStorageAccountName: 'demonewtestgroupb2e7'
