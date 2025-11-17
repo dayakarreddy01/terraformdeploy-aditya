@@ -1,5 +1,8 @@
-pool:
-  vmImage: 'Azure Pipelines'     # ensure Linux path & toolcache
+trigger:
+  - main
+
+pool: 
+ name: 'Azure Pipelines'     # ensure Linux path & toolcache
 
 steps:
 - task: TerraformInstaller@1
