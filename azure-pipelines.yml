@@ -1,62 +1,34 @@
-trigger:
-  - main
-
 pool:
-  name: 'Azure Pipelines'   # or use: vmImage: 'ubuntu-latest'
+  vmImage: 'Azure Pipelines'     # ensure Linux path & toolcache
 
-stages:
-- stage: Terraform
-  displayName: Terraform Build stage
-  jobs:
-  - job: Build
-    displayName: Terraform Build Job
-    steps:
-    # Install a known Terraform version (recommended to pin)
-    - task: TerraformInstaller@1
-      displayName: 'Install Terraform'
-      inputs:
-        terraformVersion: '1.13.5'   # pin instead of 'latest' to avoid surprises
+steps:
+- task: TerraformInstaller@1
+  inputs:
+    terraformVersion: 'latest'
 
-    # INIT (remote backend on Azure Storage)
-    - task: TerraformTask@5
-      displayName: 'terraform init'
-      inputs:
-        provider: 'azurerm'
-        command: 'init'
-        workingDirectory: '$(System.DefaultWorkingDirectory)/Folder/terraform'   # <-- correct casing
-        backendAzureRmUseEntraIdForAuthentication: false
-        backendServiceArm: 'Myconnectionactive'
-        backendAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
-        backendAzureRmResourceGroupName: 'rg-dxDevUKWest'
-        backendAzureRmStorageAccountName: 'demonewtestgroupb2e7'
-        backendAzureRmContainerName: 'demonew'
-        backendAzureRmKey: 'trf/terraform.tfstate'
+- script: |
+    terraform -version
+    which terraform
+  displayName: 'Show Terraform version'
 
-    # VALIDATE (must run from the same folder)
-    - task: TerraformTask@5
-      displayName: 'terraform validate'
-      inputs:
-        provider: 'azurerm'
-        command: 'validate'
-        workingDirectory: '$(System.DefaultWorkingDirectory)/Folder/terraform'   # <-- add this
+# Azure login (Service Connection)
+- task: AzureCLI@2
+  displayName: 'Az login'
+  inputs:
+    azureSubscription: 'Myconnectionactive'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: az account show
 
-    # PLAN
-    - task: TerraformTask@5
-      displayName: 'terraform plan'
-      inputs:
-        provider: 'azurerm'
-        command: 'plan'
-        workingDirectory: '$(System.DefaultWorkingDirectory)/Folder/terraform'   # <-- correct casing
-        commandOptions: '-lock=false'
-        environmentServiceNameAzureRM: 'Myconnectionactive'
-        environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
-
-    # APPLY
-    - task: TerraformTask@5
-      displayName: 'terraform apply'
-      inputs:
-        provider: 'azurerm'
-        command: 'apply'
-        workingDirectory: '$(System.DefaultWorkingDirectory)/Folder/terraform'   # <-- add this for consistency
-        commandOptions: '--auto-approve -lock=false'
-        environmentServiceNameAzureRM: 'Myconnectionactive'
+# Run terraform with -chdir to your folder
+- script: |
+    TF_DIR="$(System.DefaultWorkingDirectory)/Folder/terraform"
+    terraform -chdir="$TF_DIR" init \
+      -backend-config="resource_group_name=rg-dxDevUKWest" \
+      -backend-config="storage_account_name=demonewtestgroupb2e7" \
+      -backend-config="container_name=demonew" \
+      -backend-config="key=trf/terraform.tfstate" \
+      -backend-config="subscription_id=12486a52-70e3-4ae6-9f94-e6bacd147419"
+    terraform -chdir="$TF_DIR" validate
+    terraform -chdir="$TF_DIR" plan -lock=false
+    terraform -chdir="$TF_DIR" apply -auto-approve -lock=false
