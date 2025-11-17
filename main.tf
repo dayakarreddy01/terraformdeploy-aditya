@@ -1,10 +1,3 @@
-terraform {
-  required_version = ">= 1.5.0"
-}
-
-provider "azurerm" {
-}
-
 # -------------------------------------------------------
 # Load external parameters.json
 # -------------------------------------------------------
@@ -136,8 +129,7 @@ resource "azapi_resource" "blob_connection" {
       parameterValueSet = {
         name   = "managedIdentityAuth"
         values = {
-          # Azure Blob MSI generally needs no extra values in this set.
-          # (Service Bus would require namespaceEndpoint here.)
+          # Azure Blob MSI: typically no extra values
         }
       }
     }
@@ -161,13 +153,11 @@ resource "azapi_resource" "blob_connection_access_policy" {
       principal = {
         type     = "ActiveDirectory"
         identity = {
-          objectId = azurerm_logic_app_workflow.la.identity[0].principal_id
-          tenantId = data.azurerm_client_config.current.tenant_id
+        objectId = azurerm_logic_app_workflow.la.identity[0].principal_id
+        tenantId = data.azurerm_client_config.current.tenant_id
         }
       }
     }
   })
 
   depends_on = [azapi_resource.blob_connection]
-}
-``
