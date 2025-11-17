@@ -1,0 +1,8 @@
+{
+  "location": "ukwest",
+  "resourceGroupName": "rg-dxDevUKWest",
+  "logicAppName": "la-consumption-blob-uami",
+  "blobConnectionName": "azureblob",
+  "storageAccountName": "stgdxdevukw001",
+  "userAssignedIdentityResourceId": "/subscriptions/<SUB-ID>/resourceGroups/<RG>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/<UAMI-NAME>"
+}
