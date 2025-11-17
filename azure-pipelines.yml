@@ -3,27 +3,46 @@ trigger:
 
 pool: 
  name: 'Azure Pipelines'     # ensure Linux path & toolcache
-steps:
-- task: TerraformInstaller@1
-  inputs:
-    terraformVersion: 'latest'
 
-- task: AzureCLI@2
-  displayName: 'terraform init/validate/plan/apply via -chdir'
-  inputs:
-    azureSubscription: 'Myconnectionactive'
-    scriptType: bash
-    scriptLocation: inlineScript
-    inlineScript: |
-      set -euxo pipefail
-      TF_DIR="$(System.DefaultWorkingDirectory)/infra/logicapp"
-      terraform -chdir="$TF_DIR" init \
-        -backend-config="resource_group_name=$(STATE_RG)" \
-        -backend-config="storage_account_name=$(STATE_ACCOUNT)" \
-        -backend-config="container_name=$(STATE_CONTAINER)" \
-        -backend-config="key=$(STATE_KEY)" \
-        -backend-config="subscription_id=$(SUB_ID)" \
-        -backend-config="use_azuread_auth=true"
-      terraform -chdir="$TF_DIR" validate
-      terraform -chdir="$TF_DIR" plan -lock=false -detailed-exitcode
-      terraform -chdir="$TF_DIR" apply -auto-approve -lock=false
+stages:
+  - stage: Terraform
+    displayName: Terraform Build stage
+    jobs:
+    - job: Build
+      displayName:  Terraform Build Job
+      steps:
+      - task: TerraformInstaller@1
+        inputs: 
+          terraformVersion: 'latest'
+      - task: TerraformTask@5
+        inputs:
+          provider: 'azurerm'
+          command: 'init'
+          backendAzureRmUseEntraIdForAuthentication: false
+          backendServiceArm: 'Myconnectionactive'
+          backendAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
+          backendAzureRmResourceGroupName: 'demonewtest_group'
+          backendAzureRmStorageAccountName: 'demonewtestgroupb2e7'
+          backendAzureRmContainerName: 'demonew'
+          backendAzureRmKey: 'trf/terraform.tfstate'
+        
+      - task: TerraformTask@5
+        inputs:
+          provider: 'azurerm'
+          command: 'validate'
+
+      - task: TerraformTask@5
+        inputs:
+          provider: 'azurerm'
+          command: 'plan'
+          commandOptions: '-lock=false'
+          environmentServiceNameAzureRM: 'Myconnectionactive'
+          environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
+
+      - task: TerraformTask@5
+        inputs:
+          provider: 'azurerm'
+          command: 'apply'
+          commandOptions: '--auto-approve -lock=false'
+          environmentServiceNameAzureRM: 'Myconnectionactive'
+          environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
