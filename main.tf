@@ -1,25 +1,24 @@
-# -------------------------------------------------------
-# Load external parameters.json
-# -------------------------------------------------------
-locals {
-  params = jsondecode(file("${path.module}/parameters.json"))
+terraform {
+  required_version = ">= 1.4.0"
+  required_providers {
+    azurerm = { source = "hashicorp/azurerm", version = ">= 3.100" }
+    azapi   = { source = "azure/azapi",     version = ">= 2.0" }
+  }
 }
+
+provider "azurerm" { features {} }
 
 data "azurerm_client_config" "current" {}
 
-# -------------------------------------------------------
-# Resource Group
-# -------------------------------------------------------
+# 1) Resource Group
 resource "azurerm_resource_group" "rg" {
-  name     = local.params.resourceGroupName
-  location = local.params.location
+  name     = var.rg_name
+  location = var.location
 }
 
-# -------------------------------------------------------
-# Storage Account (Blob) - the target resource
-# -------------------------------------------------------
-resource "azurerm_storage_account" "stg" {
-  name                     = local.params.storageAccountName
+# 2) Example target resource: Storage account + container
+resource "azurerm_storage_account" "sa" {
+  name                     = var.storage_account_name
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
   account_tier             = "Standard"
@@ -27,137 +26,84 @@ resource "azurerm_storage_account" "stg" {
   min_tls_version          = "TLS1_2"
 }
 
-# -------------------------------------------------------
-# Logic App (Consumption) using ONLY User-Assigned MSI
-# -------------------------------------------------------
+resource "azurerm_storage_container" "cont" {
+  name                  = var.storage_container_name
+  storage_account_name  = azurerm_storage_account.sa.name
+  container_access_type = "private"
+}
+
+# 3) API connection (Azure Blob) configured for Managed Identity
+#    IMPORTANT: use AzAPI to send the exact payload the portal uses
+#    parameterValueSet -> name: managedIdentityAuth (+ required values for the connector)
+resource "azapi_resource" "blob_connection" {
+  type      = "Microsoft.Web/connections@2016-06-01"
+  name      = var.blob_connection_name
+  parent_id = azurerm_resource_group.rg.id
+  location  = azurerm_resource_group.rg.location
+
+  body = jsonencode({
+    properties = {
+      displayName = var.blob_connection_display_name
+      api = {
+        id = "/subscriptions/${data.azurerm_client_config.current.subscription_id}" +
+             "/providers/Microsoft.Web/locations/${azurerm_resource_group.rg.location}/managedApis/azureblob"
+      }
+      # For Azure Blob, pass the storage account name as a value in the managedIdentityAuth set
+      # (Connectors differ; some require additional values such as namespaceEndpoint for Service Bus.)
+      parameterValueSet = {
+        name   = "managedIdentityAuth"
+        values = {
+          accountName = { value = azurerm_storage_account.sa.name }
+        }
+      }
+    }
+  })
+}
+
+# 4) Logic App (Consumption) with system-assigned managed identity
 resource "azurerm_logic_app_workflow" "la" {
-  name                = local.params.logicAppName
+  name                = var.logic_app_name
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
+  enabled             = true
 
-  identity {
-    type         = "UserAssigned"
-    identity_ids = [local.params.userAssignedIdentityResourceId]
+  identity { type = "SystemAssigned" }
+
+  # declare the $connections parameter schema
+  workflow_parameters = {
+    "$connections" = jsonencode({
+      defaultValue = {}
+      type         = "Object"
+    })
   }
 
-  # Minimal workflow definition with Request trigger and Blob action
-  definition = jsonencode({
-    "$schema"        = "https://schema.management.azure.com/schemas/2016-06-01/workflowdefinition.json#"
-    "contentVersion" = "1.0.0.0"
-    "parameters"     = {
-      "storageAccountName" = { "type" = "string" }
-      "$connections"       = { "type" = "Object" }
-    }
-    "triggers" = {
-      "manual" = {
-        "type"   = "Request",
-        "kind"   = "Http",
-        "inputs" = { "method" = "GET" }
-      }
-    }
-    "actions" = {
-      "List_Containers" = {
-        "type"   = "ApiConnection",
-        "inputs" = {
-          "host"  = { "connection" = { "name" = "@parameters('$connections')['azureblob']['connectionId']" } }
-          "path"  = "/v2/storageAccounts/@{encodeURIComponent(parameters('storageAccountName'))}/blobServices/default/containers"
-          "method"= "GET"
-        }
-        "runAfter" = {}
-      }
-    }
-    "outputs" = {}
-  })
-
+  # provide the values including authentication for the connection
   parameters = {
-    "storageAccountName" = azurerm_storage_account.stg.name
-
-    # Wire the API connection and assert MSI+UAMI
     "$connections" = jsonencode({
-      value = {
-        azureblob = {
-          connectionId   = azapi_resource.blob_connection.id
-          connectionName = local.params.blobConnectionName
-          id             = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Web/locations/${local.params.location}/managedApis/azureblob"
-          connectionProperties = {
-            authentication = {
-              type     = "ManagedServiceIdentity"
-              identity = local.params.userAssignedIdentityResourceId
-            }
+      azureblob = {
+        id             = "/subscriptions/${data.azurerm_client_config.current.subscription_id}" +
+                         "/providers/Microsoft.Web/locations/${azurerm_resource_group.rg.location}/managedApis/azureblob"
+        connectionId   = azapi_resource.blob_connection.id
+        connectionName = var.blob_connection_name
+        connectionProperties = {
+          authentication = {
+            # THIS IS CRITICAL: tells the workflow to use MI when calling the connection
+            type = "ManagedServiceIdentity"
           }
         }
       }
     })
   }
 
+  # your workflow definition (Consumption schema 2016-06-01)
+  # keep it minimal at first; add actions that reference the connection later
+  definition = file("${path.module}/workflow-definition.json")
+
   depends_on = [azapi_resource.blob_connection]
 }
 
-# -------------------------------------------------------
-# RBAC: grant the UAMI principal data-plane access on Storage
-# -------------------------------------------------------
-# Resolve UAMI principal (object) ID via ARM reference
-data "azapi_resource" "uami" {
-  type      = "Microsoft.ManagedIdentity/userAssignedIdentities@2025-01-31-preview"
-  name      = split("/", local.params.userAssignedIdentityResourceId)[length(split("/", local.params.userAssignedIdentityResourceId)) - 1]
-  parent_id = join("/", slice(split("/", local.params.userAssignedIdentityResourceId), 0, 8))
-}
-
-resource "azurerm_role_assignment" "blob_contributor" {
-  scope                = azurerm_storage_account.stg.id
+# 5) RBAC: grant the Logic App’s identity access to the target service
+resource "azurerm_role_assignment" "blob_data_contributor" {
+  scope                = azurerm_storage_account.sa.id
   role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = data.azapi_resource.uami.output.identity.principalId
-}
-
-# -------------------------------------------------------
-# API Connection (Consumption) for Azure Blob using MSI
-# -------------------------------------------------------
-resource "azapi_resource" "blob_connection" {
-  type      = "Microsoft.Web/connections@2016-06-01"
-  name      = local.params.blobConnectionName
-  location  = azurerm_resource_group.rg.location
-  parent_id = azurerm_resource_group.rg.id
-
-  body = jsonencode({
-    kind       = "V1"
-    properties = {
-      displayName = local.params.blobConnectionName
-      api = {
-        id = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Web/locations/${local.params.location}/managedApis/azureblob"
-      }
-      # MSI variant uses parameterValueSet with the well-known set name
-      parameterValueSet = {
-        name   = "managedIdentityAuth"
-        values = {
-          # Azure Blob MSI: typically no extra values
-        }
-      }
-    }
-  })
-
-  # Ensure RBAC is in place before the connection is created
-  depends_on = [azurerm_role_assignment.blob_contributor]
-}
-
-# -------------------------------------------------------
-# Optional: Connection Access Policy for the Logic App principal
-# -------------------------------------------------------
-resource "azapi_resource" "blob_connection_access_policy" {
-  type      = "Microsoft.Web/connections/accessPolicies@2016-06-01"
-  name      = azurerm_logic_app_workflow.la.identity[0].principal_id
-  location  = azurerm_resource_group.rg.location
-  parent_id = azapi_resource.blob_connection.id
-
-  body = jsonencode({
-    properties = {
-      principal = {
-        type     = "ActiveDirectory"
-        identity = {
-        objectId = azurerm_logic_app_workflow.la.identity[0].principal_id
-        tenantId = data.azurerm_client_config.current.tenant_id
-        }
-      }
-    }
-  })
-
-  depends_on = [azapi_resource.blob_connection]
+  principal_id         = azurerm_logic_app_workflow.la.identity[0].principal_id
