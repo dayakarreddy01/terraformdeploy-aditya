@@ -43,8 +43,7 @@ resource "azurerm_storage_container" "cont" {
 }
 
 # 3) API connection (Azure Blob) configured for Managed Identity
-#    IMPORTANT: use AzAPI to send the same shape the portal uses
-#    parameterValueSet -> name: managedIdentityAuth (+ required values for the connector)
+#    IMPORTANT: parameterValueSet -> name: managedIdentityAuth (+ required values for the connector)
 resource "azapi_resource" "blob_connection" {
   type      = "Microsoft.Web/connections@2016-06-01"
   name      = var.blob_connection_name
@@ -54,3 +53,61 @@ resource "azapi_resource" "blob_connection" {
   body = jsonencode({
     properties = {
       displayName = var.blob_connection_display_name
+      api = {
+        id = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Web/locations/${azurerm_resource_group.rg.location}/managedApis/azureblob"
+      }
+      parameterValueSet = {
+        name   = "managedIdentityAuth"
+        values = {
+          accountName = { value = azurerm_storage_account.sa.name }
+        }
+      }
+    }
+  })
+}
+
+# 4) Logic App (Consumption) with system-assigned managed identity
+resource "azurerm_logic_app_workflow" "la" {
+  name                = var.logic_app_name
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  enabled             = true
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  # declare the $connections parameter schema
+  workflow_parameters = {
+    "$connections" = jsonencode({
+      defaultValue = {}
+      type         = "Object"
+    })
+  }
+
+  # provide the values including authentication for the connection
+  parameters = {
+    "$connections" = jsonencode({
+      azureblob = {
+        id             = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Web/locations/${azurerm_resource_group.rg.location}/managedApis/azureblob"
+        connectionId   = azapi_resource.blob_connection.id
+        connectionName = var.blob_connection_name
+        connectionProperties = {
+          authentication = {
+            type = "ManagedServiceIdentity"
+          }
+        }
+      }
+    })
+  }
+
+  definition = file("${path.module}/workflow-definition.json")
+
+  depends_on = [azapi_resource.blob_connection]
+}
+
+# 5) RBAC: grant the Logic App’s identity access to the target service
+resource "azurerm_role_assignment" "blob_data_contributor" {
+  scope                = azurerm_storage_account.sa.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_logic_app_workflow.la.identity[0].principal_id
