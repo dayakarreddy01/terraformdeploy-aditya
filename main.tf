@@ -49,8 +49,10 @@ resource "azapi_resource" "blob_connection" {
     properties = {
       displayName = var.blob_connection_display_name
       api = {
-        id = "/subscriptions/${data.azurerm_client_config.current.subscription_id}" +
+       id = "/subscriptions/${data.azurerm_client_config.current.subscription_id}" +
              "/providers/Microsoft.Web/locations/${azurerm_resource_group.rg.location}/managedApis/azureblob"
+      }
+
       }
       # For Azure Blob, pass the storage account name as a value in the managedIdentityAuth set
       # (Connectors differ; some require additional values such as namespaceEndpoint for Service Bus.)
