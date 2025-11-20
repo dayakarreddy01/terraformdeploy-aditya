@@ -31,9 +31,10 @@ stages:
       inputs:
         provider: 'azurerm'
         command: 'custom'
-        customCommand: 'fmt'
-        outputTo: 'console'
         workingDirectory: '$(tf_working_dir)'
+        outputTo: 'console'
+        customCommand: 'fmt'
+        environmentServiceNameAzureRM: 'Myconnectionactive'
 
     # INIT (must be before validate/plan/apply)
     - task: TerraformTask@5
@@ -41,12 +42,13 @@ stages:
       inputs:
         provider: 'azurerm'
         command: 'init'
-        backendServiceArm: '$(serviceConnection)'
+        workingDirectory: '$(tf_working_dir)'
+        backendAzureRmUseEntraIdForAuthentication: false
+        backendServiceArm: 'Myconnectionactive'
         backendAzureRmResourceGroupName: '$(tfstate_rg)'
         backendAzureRmStorageAccountName: '$(tfstate_sa)'
         backendAzureRmContainerName: '$(tfstate_container)'
         backendAzureRmKey: '$(tfstate_key)'
-        workingDirectory: '$(tf_working_dir)'
 
     # VALIDATE
     - task: TerraformTask@5
@@ -62,10 +64,9 @@ stages:
       inputs:
         provider: 'azurerm'
         command: 'plan'
-        commandOptions: '-lock=false -out=tfplan'
-        environmentServiceNameAzureRM: '$(serviceConnection)'
-        # environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419' # optional
         workingDirectory: '$(tf_working_dir)'
+        commandOptions: '-lock=false -out=tfplan'
+        environmentServiceNameAzureRM: 'Myconnectionactive'
 
     # APPLY (optional / gated)
     - task: TerraformTask@5
@@ -73,8 +74,7 @@ stages:
       inputs:
         provider: 'azurerm'
         command: 'apply'
-        commandOptions: '-auto-approve -lock=false tfplan'
-        environmentServiceNameAzureRM: '$(serviceConnection)'
-        # environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419' # optional
         workingDirectory: '$(tf_working_dir)'
+        commandOptions: '-auto-approve -lock=false tfplan'
+        environmentServiceNameAzureRM: 'Myconnectionactive'
       condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
