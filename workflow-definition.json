@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": { "type": "Object", "defaultValue": {} }
+  },
+  "triggers": {
+    "manual": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "containerName": { "type": "string" }
+          },
+          "required": ["containerName"]
+        }
+      }
+    }
+  },
+  "actions": {
+    "List_blobs": {
+      "type": "ApiConnection",
+      "inputs": {
+        "host": {
+          "connection": {
+            "name": "@parameters('$connections')['azureblob']['connectionId']"
+          }
+        },
+        "method": "get",
+        "path": "/datasets/default/tables/@{triggerBody()['containerName']}/items"
+      },
+      "runAfter": {}
+    },
+    "Compose_Example": {
+      "type": "Compose",
+      "inputs": "Hello from Managed Identity setup!"
+    }
+  },
+  "outputs": {}
+}
