@@ -1,54 +1,80 @@
 trigger:
   - main
 
-pool: 
- name: 'Azure Pipelines'     # ensure Linux path & toolcache
-# azure-pipelines.yml
+pool:
+  name: 'Azure Pipelines'   # Microsoft-hosted; Ubuntu underneath
 
 variables:
-  serviceConnection: 'azurerm-spn-or-oidc'   # Azure RM service connection name
-  tf_working_dir: 'infra'
+  serviceConnection: 'Myconnectionactive'   # <-- Use your existing service connection
+  tf_working_dir: 'infra'                   # <-- folder where providers.tf, main.tf exist
   tfstate_rg: 'rg-tfstate'
   tfstate_sa: 'sttfstate123456'
   tfstate_container: 'tfstate'
   tfstate_key: 'logicapp-consumption.tfstate'
+  tf_version: '1.14.0'
 
 stages:
-  - stage: Terraform
-    displayName: Terraform Build stage
-    jobs:
-    - job: Build
-      displayName:  Terraform Build Job
-      steps:
-      - task: TerraformInstaller@1
-        inputs:
-          terraformVersion: 'latest'
+- stage: Terraform
+  displayName: Terraform Build stage
+  jobs:
+  - job: Build
+    displayName: Terraform Build Job
+    steps:
+    - task: TerraformInstaller@1
+      displayName: 'Install Terraform $(tf_version)'
+      inputs:
+        terraformVersion: '$(tf_version)'
 
-      - task: TerraformTask@5
-        inputs:
-          provider: 'azurerm'
-          command: 'custom'
-          outputTo: 'console'
-          customCommand: 'fmt'
-          environmentServiceNameAzureRM: 'Myconnectionactive'
+    # Format
+    - task: TerraformTask@5
+      displayName: 'terraform fmt'
+      inputs:
+        provider: 'azurerm'
+        command: 'custom'
+        customCommand: 'fmt'
+        outputTo: 'console'
+        workingDirectory: '$(tf_working_dir)'
 
-      - task: TerraformTask@5
-        inputs:
-          provider: 'azurerm'
-          command: 'validate'
+    # INIT (must be before validate/plan/apply)
+    - task: TerraformTask@5
+      displayName: 'terraform init (azurerm backend)'
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendServiceArm: '$(serviceConnection)'
+        backendAzureRmResourceGroupName: '$(tfstate_rg)'
+        backendAzureRmStorageAccountName: '$(tfstate_sa)'
+        backendAzureRmContainerName: '$(tfstate_container)'
+        backendAzureRmKey: '$(tfstate_key)'
+        workingDirectory: '$(tf_working_dir)'
 
-      - task: TerraformTask@5
-        inputs:
-          provider: 'azurerm'
-          command: 'plan'
-          commandOptions: '-lock=false'
-          environmentServiceNameAzureRM: 'Myconnectionactive'
-          environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
+    # VALIDATE
+    - task: TerraformTask@5
+      displayName: 'terraform validate'
+      inputs:
+        provider: 'azurerm'
+        command: 'validate'
+        workingDirectory: '$(tf_working_dir)'
 
-      - task: TerraformTask@5
-        inputs:
-          provider: 'azurerm'
-          command: 'apply'
-          commandOptions: '--auto-approve -lock=false'
-          environmentServiceNameAzureRM: 'Myconnectionactive'
-          environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
+    # PLAN
+    - task: TerraformTask@5
+      displayName: 'terraform plan'
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        commandOptions: '-lock=false -out=tfplan'
+        environmentServiceNameAzureRM: '$(serviceConnection)'
+        # environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419' # optional
+        workingDirectory: '$(tf_working_dir)'
+
+    # APPLY (optional / gated)
+    - task: TerraformTask@5
+      displayName: 'terraform apply'
+      inputs:
+        provider: 'azurerm'
+        command: 'apply'
+        commandOptions: '-auto-approve -lock=false tfplan'
+        environmentServiceNameAzureRM: '$(serviceConnection)'
+        # environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419' # optional
+        workingDirectory: '$(tf_working_dir)'
+      condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
