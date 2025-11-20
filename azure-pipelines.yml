@@ -2,11 +2,11 @@ trigger:
   - main
 
 pool:
-  name: 'Azure Pipelines'   # Microsoft-hosted; Ubuntu underneath
+  vmImage: 'Azure Pipelines'
 
 variables:
-  serviceConnection: 'Myconnectionactive'   # <-- Use your existing service connection
-  tf_working_dir: 'infra'                   # <-- folder where providers.tf, main.tf exist
+  serviceConnection: 'Myconnectionactive'
+  tf_working_dir: 'infra'
   tfstate_rg: 'rg-tfstate'
   tfstate_sa: 'sttfstate123456'
   tfstate_container: 'tfstate'
@@ -20,61 +20,54 @@ stages:
   - job: Build
     displayName: Terraform Build Job
     steps:
+    - checkout: self
+
     - task: TerraformInstaller@1
       displayName: 'Install Terraform $(tf_version)'
       inputs:
         terraformVersion: '$(tf_version)'
 
-    # Format
-    - task: TerraformTask@5
+    # Azure login via ARM service connection
+    - task: AzureCLI@2
+      displayName: 'Azure Login'
+      inputs:
+        azureSubscription: '$(serviceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az account show
+
+    - script: |
+        set -e
+        cd "$(tf_working_dir)"
+        terraform fmt -check
       displayName: 'terraform fmt'
-      inputs:
-        provider: 'azurerm'
-        command: 'custom'
-        workingDirectory: '$(tf_working_dir)'
-        outputTo: 'console'
-        customCommand: 'fmt'
-        environmentServiceNameAzureRM: 'Myconnectionactive'
 
-    # INIT (must be before validate/plan/apply)
-    - task: TerraformTask@5
+    - script: |
+        set -e
+        cd "$(tf_working_dir)"
+        terraform init \
+          -backend-config="resource_group_name=$(tfstate_rg)" \
+          -backend-config="storage_account_name=$(tfstate_sa)" \
+          -backend-config="container_name=$(tfstate_container)" \
+          -backend-config="key=$(tfstate_key)" \
+          -upgrade
       displayName: 'terraform init (azurerm backend)'
-      inputs:
-        provider: 'azurerm'
-        command: 'init'
-        workingDirectory: '$(tf_working_dir)'
-        backendAzureRmUseEntraIdForAuthentication: false
-        backendServiceArm: 'Myconnectionactive'
-        backendAzureRmResourceGroupName: '$(tfstate_rg)'
-        backendAzureRmStorageAccountName: '$(tfstate_sa)'
-        backendAzureRmContainerName: '$(tfstate_container)'
-        backendAzureRmKey: '$(tfstate_key)'
 
-    # VALIDATE
-    - task: TerraformTask@5
+    - script: |
+        set -e
+        cd "$(tf_working_dir)"
+        terraform validate
       displayName: 'terraform validate'
-      inputs:
-        provider: 'azurerm'
-        command: 'validate'
-        workingDirectory: '$(tf_working_dir)'
 
-    # PLAN
-    - task: TerraformTask@5
+    - script: |
+        set -e
+        cd "$(tf_working_dir)"
+        terraform plan -out=tfplan -lock=false
       displayName: 'terraform plan'
-      inputs:
-        provider: 'azurerm'
-        command: 'plan'
-        workingDirectory: '$(tf_working_dir)'
-        commandOptions: '-lock=false -out=tfplan'
-        environmentServiceNameAzureRM: 'Myconnectionactive'
 
-    # APPLY (optional / gated)
-    - task: TerraformTask@5
+    - script: |
+        set -e
+        cd "$(tf_working_dir)"
+        terraform apply -auto-approve -lock=false tfplan
       displayName: 'terraform apply'
-      inputs:
-        provider: 'azurerm'
-        command: 'apply'
-        workingDirectory: '$(tf_working_dir)'
-        commandOptions: '-auto-approve -lock=false tfplan'
-        environmentServiceNameAzureRM: 'Myconnectionactive'
-      condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
