@@ -2,7 +2,7 @@ trigger:
   - main
 
 pool:
-  vmImage: 'Azure Pipelines'
+ name: 'Azure Pipelines'
 
 variables:
   serviceConnection: 'Myconnectionactive'
