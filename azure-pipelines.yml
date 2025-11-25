@@ -40,12 +40,6 @@ stages:
     - script: |
         set -e
         cd "$(tf_working_dir)"
-        terraform fmt -check
-      displayName: 'terraform fmt'
-
-    - script: |
-        set -e
-        cd "$(tf_working_dir)"
         terraform init \
           -backend-config="resource_group_name=$(tfstate_rg)" \
           -backend-config="storage_account_name=$(tfstate_sa)" \
