@@ -4,64 +4,46 @@ trigger:
 pool:
  name: 'Azure Pipelines'
 
-variables:
-  serviceConnection: 'Myconnectionactive'
-  tf_working_dir: 'infra'
-  tfstate_rg: 'rg-tfstate'
-  tfstate_sa: 'sttfstate123456'
-  tfstate_container: 'tfstate'
-  tfstate_key: 'logicapp-consumption.tfstate'
-  tf_version: '1.14.0'
-
 stages:
-- stage: Terraform
-  displayName: Terraform Build stage
-  jobs:
-  - job: Build
-    displayName: Terraform Build Job
-    steps:
-    - checkout: self
+  - stage: Terraform
+    displayName: Terraform Build stage
+    jobs:
+    - job: Build
+      displayName:  Terraform Build Job
+      steps:
+      - task: TerraformInstaller@1
+        inputs: 
+          terraformVersion: 'latest'
+      - task: TerraformTask@5
+        inputs:
+          provider: 'azurerm'
+          command: 'init'
+          backendServiceArm: 'Myconnectionactive'
+          backendAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
+          backendAzureRmResourceGroupName: 'demonewtest_group'
+          backendAzureRmStorageAccountName: 'demonewtestgroupa219'
+          backendAzureRmContainerName: 'demonew'
+          backendAzureRmKey: 'trf/terraform.tfstate'
+        
+      - task: TerraformTask@5
+        inputs:
+          provider: 'azurerm'
+          command: 'validate'
 
-    - task: TerraformInstaller@1
-      displayName: 'Install Terraform $(tf_version)'
-      inputs:
-        terraformVersion: '$(tf_version)'
+      - task: TerraformTask@5
+        inputs:
+          provider: 'azurerm'
+          command: 'plan'
+          commandOptions: '-lock=false'
+          environmentServiceNameAzureRM: 'Myconnectionactive'
+          environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
 
-    # Azure login via ARM service connection
-    - task: AzureCLI@2
-      displayName: 'Azure Login'
-      inputs:
-        azureSubscription: '$(serviceConnection)'
-        scriptType: 'bash'
-        scriptLocation: 'inlineScript'
-        inlineScript: |
-          az account show
+      - task: TerraformTask@5
+        inputs:
+          provider: 'azurerm'
+          command: 'apply'
+          commandOptions: '--auto-approve -lock=false'
+          environmentServiceNameAzureRM: 'Myconnectionactive'
+          environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
+      
 
-    - script: |
-        set -e
-        cd "$(tf_working_dir)"
-        terraform init \
-          -backend-config="resource_group_name=$(tfstate_rg)" \
-          -backend-config="storage_account_name=$(tfstate_sa)" \
-          -backend-config="container_name=$(tfstate_container)" \
-          -backend-config="key=$(tfstate_key)" \
-          -upgrade
-      displayName: 'terraform init (azurerm backend)'
-
-    - script: |
-        set -e
-        cd "$(tf_working_dir)"
-        terraform validate
-      displayName: 'terraform validate'
-
-    - script: |
-        set -e
-        cd "$(tf_working_dir)"
-        terraform plan -out=tfplan -lock=false
-      displayName: 'terraform plan'
-
-    - script: |
-        set -e
-        cd "$(tf_working_dir)"
-        terraform apply -auto-approve -lock=false tfplan
-      displayName: 'terraform apply'
