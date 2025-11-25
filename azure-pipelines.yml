@@ -20,9 +20,9 @@ stages:
           command: 'init'
           backendServiceArm: 'Myconnectionactive'
           backendAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
-          backendAzureRmResourceGroupName: 'demonewtest_group'
-          backendAzureRmStorageAccountName: 'demonewtestgroupa219'
-          backendAzureRmContainerName: 'demonew'
+          backendAzureRmResourceGroupName: 'New_LA'
+          backendAzureRmStorageAccountName: 'mynewstoragestr123'
+          backendAzureRmContainerName: 'demonewconnect'
           backendAzureRmKey: 'trf/terraform.tfstate'
         
       - task: TerraformTask@5
