@@ -4,9 +4,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.0"
     }
-  }
-}
 
-provider "azurerm" {
-  features {}
+    azapi = {
+      source  = "Azure/azapi"   # ✅ FIX HERE
+      version = "~> 1.5"        # or latest
+    }
+  }
 }
