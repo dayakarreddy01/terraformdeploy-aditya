@@ -18,8 +18,8 @@ stages:
         inputs:
           provider: 'azurerm'
           command: 'init'
-          backendServiceArm: 'Myconnectionactive'
-          backendAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
+          backendServiceArm: 'terraform_consumpetion_logicapp1'
+          backendAzureRmOverrideSubscriptionID: '771cd5c1-6b02-4169-a5cc-dc344f0e8941'
           backendAzureRmResourceGroupName: 'New_LA'
           backendAzureRmStorageAccountName: 'mynewstoragestr123'
           backendAzureRmContainerName: 'demonewconnect'
@@ -35,15 +35,15 @@ stages:
           provider: 'azurerm'
           command: 'plan'
           commandOptions: '-lock=false'
-          environmentServiceNameAzureRM: 'Myconnectionactive'
-          environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
+          environmentServiceNameAzureRM: 'terraform_consumpetion_logicapp1'
+          environmentAzureRmOverrideSubscriptionID: '771cd5c1-6b02-4169-a5cc-dc344f0e8941'
 
       - task: TerraformTask@5
         inputs:
           provider: 'azurerm'
           command: 'apply'
           commandOptions: '--auto-approve -lock=false'
-          environmentServiceNameAzureRM: 'Myconnectionactive'
-          environmentAzureRmOverrideSubscriptionID: '12486a52-70e3-4ae6-9f94-e6bacd147419'
+          environmentServiceNameAzureRM: 'terraform_consumpetion_logicapp1'
+          environmentAzureRmOverrideSubscriptionID: '771cd5c1-6b02-4169-a5cc-dc344f0e8941'
       
 
